@@ -20,7 +20,7 @@ int main(int argc, const char **argv)
   printf("listening!\n");
 
   addrinfo resAddrInfo;
-  int sfdSend = create_dgram_socket("localhost", portSend, &resAddrInfo);
+  int sfdSend;
 
   while (true)
   {
@@ -39,6 +39,7 @@ int main(int argc, const char **argv)
       {
         case INIT:
           std::cout << "Client" << packet.clientId << " connected\n";
+          sfdSend = create_dgram_socket("localhost", portSend, &resAddrInfo);
           send_packet(sfdSend, resAddrInfo, &packet);
           break;
         case DATA:
