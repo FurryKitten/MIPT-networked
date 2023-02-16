@@ -6,36 +6,49 @@
 #include <cstdio>
 #include <iostream>
 #include "socket_tools.h"
+#include "packet.h"
 
 int main(int argc, const char **argv)
 {
-  const char *port = "2022";
+  const char *portListen = "2022";
+  const char *portSend = "2023";
 
-  int sfd = create_dgram_socket(nullptr, port, nullptr);
+  int sfdListen = create_dgram_socket(nullptr, portListen, nullptr);
 
-  if (sfd == -1)
+  if (sfdListen == -1)
     return 1;
   printf("listening!\n");
+
+  addrinfo resAddrInfo;
+  int sfdSend = create_dgram_socket("localhost", portSend, &resAddrInfo);
 
   while (true)
   {
     fd_set readSet;
     FD_ZERO(&readSet);
-    FD_SET(sfd, &readSet);
+    FD_SET(sfdListen, &readSet);
 
     timeval timeout = { 0, 100000 }; // 100 ms
-    select(sfd + 1, &readSet, NULL, NULL, &timeout);
+    select(sfdListen + 1, &readSet, NULL, NULL, &timeout);
 
 
-    if (FD_ISSET(sfd, &readSet))
+    if (FD_ISSET(sfdListen, &readSet))
     {
-      constexpr size_t buf_size = 1000;
-      static char buffer[buf_size];
-      memset(buffer, 0, buf_size);
-
-      ssize_t numBytes = recvfrom(sfd, buffer, buf_size - 1, 0, nullptr, nullptr);
-      if (numBytes > 0)
-        printf("%s\n", buffer); // assume that buffer is a string
+      Packet packet = get_packet(sfdListen);
+      switch (packet.packetType)
+      {
+        case INIT:
+          std::cout << "Client" << packet.clientId << " connected\n";
+          send_packet(sfdSend, resAddrInfo, &packet);
+          break;
+        case DATA:
+          std::cout << "Received message from Client" << packet.clientId << ": " << packet.message << "\n";
+          packet.message *= 2;
+          send_packet(sfdSend, resAddrInfo, &packet);
+          break;
+        case KEEP_ALIVE:
+          break;
+      }
     }
   }
   return 0;
