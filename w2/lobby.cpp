@@ -1,5 +1,7 @@
 #include <enet/enet.h>
 #include <iostream>
+#include <set>
+#include "util.h"
 
 int main(int argc, const char **argv)
 {
@@ -21,6 +23,10 @@ int main(int argc, const char **argv)
     return 1;
   }
 
+  bool started = false;
+  std::string serverPortMessage = "port10889";
+  std::set<ENetPeer *> peers;
+
   while (true)
   {
     ENetEvent event;
@@ -30,10 +36,28 @@ int main(int argc, const char **argv)
       {
       case ENET_EVENT_TYPE_CONNECT:
         printf("Connection with %x:%u established\n", event.peer->address.host, event.peer->address.port);
+        peers.insert(event.peer);
+        if (started)
+          send_rel_micro_packet(event.peer, serverPortMessage.c_str());
         break;
       case ENET_EVENT_TYPE_RECEIVE:
-        printf("Packet received '%s'\n", event.packet->data);
+      {
+        std::string dataString{(const char *)event.packet->data};
+        printf("Packet received '%s'\n", dataString.c_str());
+        if (dataString.compare("start") == 0)
+        {
+          for (ENetPeer *peer : peers)
+          {
+            send_rel_micro_packet(peer, serverPortMessage.c_str());
+          }
+          started = true;
+        }
         enet_packet_destroy(event.packet);
+        break;
+      }
+      case ENET_EVENT_TYPE_DISCONNECT:
+        printf("Disconnected %x:%u\n", event.peer->address.host, event.peer->address.port);
+        peers.erase(event.peer);
         break;
       default:
         break;
@@ -46,4 +70,3 @@ int main(int argc, const char **argv)
   atexit(enet_deinitialize);
   return 0;
 }
-

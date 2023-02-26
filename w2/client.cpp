@@ -1,28 +1,19 @@
 #include <enet/enet.h>
+
+#include <cstring>
 #include <iostream>
+#include <thread>
 
-void send_fragmented_packet(ENetPeer *peer)
+#include "util.h"
+
+void process_input(ENetPeer *lobbyPeer, bool connected)
 {
-  const char *baseMsg = "Stay awhile and listen. ";
-  const size_t msgLen = strlen(baseMsg);
-
-  const size_t sendSize = 2500;
-  char *hugeMessage = new char[sendSize];
-  for (size_t i = 0; i < sendSize; ++i)
-    hugeMessage[i] = baseMsg[i % msgLen];
-  hugeMessage[sendSize-1] = '\0';
-
-  ENetPacket *packet = enet_packet_create(hugeMessage, sendSize, ENET_PACKET_FLAG_RELIABLE);
-  enet_peer_send(peer, 0, packet);
-
-  delete[] hugeMessage;
-}
-
-void send_micro_packet(ENetPeer *peer)
-{
-  const char *msg = "dv/dt";
-  ENetPacket *packet = enet_packet_create(msg, strlen(msg) + 1, ENET_PACKET_FLAG_UNSEQUENCED);
-  enet_peer_send(peer, 1, packet);
+  while (!connected)
+  {
+    std::string inputString;
+    std::getline(std::cin, inputString);
+    send_rel_micro_packet(lobbyPeer, inputString.c_str());
+  }
 }
 
 int main(int argc, const char **argv)
@@ -33,28 +24,31 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  ENetHost *client = enet_host_create(nullptr, 1, 2, 0, 0);
+  ENetHost *client = enet_host_create(nullptr, 2, 2, 0, 0);
   if (!client)
   {
     printf("Cannot create ENet client\n");
     return 1;
   }
 
-  ENetAddress address;
-  enet_address_set_host(&address, "localhost");
-  address.port = 10887;
+  ENetAddress lobbyAddress;
+  enet_address_set_host(&lobbyAddress, "localhost");
+  lobbyAddress.port = 10887;
 
-  ENetPeer *lobbyPeer = enet_host_connect(client, &address, 2, 0);
+  ENetPeer *serverPeer = nullptr;
+  ENetPeer *lobbyPeer = enet_host_connect(client, &lobbyAddress, 2, 0);
   if (!lobbyPeer)
   {
     printf("Cannot connect to lobby");
     return 1;
   }
 
-  uint32_t timeStart = enet_time_get();
-  uint32_t lastFragmentedSendTime = timeStart;
-  uint32_t lastMicroSendTime = timeStart;
   bool connected = false;
+
+  std::thread input_thread(process_input, lobbyPeer, connected);
+
+  uint32_t timeStart = enet_time_get();
+  uint32_t lastMicroSendTime = timeStart;
   while (true)
   {
     ENetEvent event;
@@ -64,12 +58,44 @@ int main(int argc, const char **argv)
       {
       case ENET_EVENT_TYPE_CONNECT:
         printf("Connection with %x:%u established\n", event.peer->address.host, event.peer->address.port);
-        connected = true;
         break;
       case ENET_EVENT_TYPE_RECEIVE:
-        printf("Packet received '%s'\n", event.packet->data);
+      {
+        std::string dataString{(const char *)event.packet->data};
+        std::string packetType{dataString.substr(0, 4)};
+        if (packetType.compare("port") == 0)
+        {
+          ENetAddress serverAddress;
+          enet_address_set_host(&serverAddress, "localhost");
+          serverAddress.port = std::atoi(dataString.c_str() + 4);
+          printf("Connecting to %x:%u...\n", serverAddress.host, serverAddress.port);
+          serverPeer = enet_host_connect(client, &serverAddress, 2, 0);
+          if (!serverPeer)
+          {
+            printf("Can't connect to %x:%u...\n", serverAddress.host, serverAddress.port);
+            return 1;
+          }
+          connected = true;
+        }
+        else if (packetType.compare("time") == 0)
+        {
+          printf("Server time: %s\n", dataString.c_str() + 4);
+        }
+        else if (packetType.compare("ping") == 0)
+        {
+          printf("Player pings:\n%s", dataString.c_str() + 4);
+        }
+        else if (packetType.compare("list") == 0)
+        {
+          printf("Player list: %s\n", dataString.c_str() + 4);
+        }
+        else
+        {
+        printf("Packet received '%s'\n", dataString.c_str());
+        }
         enet_packet_destroy(event.packet);
         break;
+      }
       default:
         break;
       };
@@ -77,17 +103,15 @@ int main(int argc, const char **argv)
     if (connected)
     {
       uint32_t curTime = enet_time_get();
-      if (curTime - lastFragmentedSendTime > 1000)
-      {
-        lastFragmentedSendTime = curTime;
-        send_fragmented_packet(lobbyPeer);
-      }
-      if (curTime - lastMicroSendTime > 100)
+      if (curTime - lastMicroSendTime > 5000)
       {
         lastMicroSendTime = curTime;
-        send_micro_packet(lobbyPeer);
+        send_rel_micro_packet(serverPeer, get_time_message().c_str());
       }
     }
   }
+
+  input_thread.join();
+
   return 0;
 }
