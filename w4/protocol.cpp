@@ -1,4 +1,5 @@
 #include "protocol.h"
+#include "bitstream.h"
 #include <cstring> // memcpy
 
 void send_join(ENetPeer *peer)
@@ -31,31 +32,29 @@ void send_set_controlled_entity(ENetPeer *peer, uint16_t eid)
   enet_peer_send(peer, 0, packet);
 }
 
-void send_entity_state(ENetPeer *peer, uint16_t eid, float x, float y)
+void send_entity_state(ENetPeer *peer, uint16_t eid, Vector2 pos, float radius)
 {
   ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint16_t) +
-                                                   2 * sizeof(float),
+                                                   3 * sizeof(float),
                                                    ENET_PACKET_FLAG_UNSEQUENCED);
-  uint8_t *ptr = packet->data;
-  *ptr = E_CLIENT_TO_SERVER_STATE; ptr += sizeof(uint8_t);
-  memcpy(ptr, &eid, sizeof(uint16_t)); ptr += sizeof(uint16_t);
-  memcpy(ptr, &x, sizeof(float)); ptr += sizeof(float);
-  memcpy(ptr, &y, sizeof(float)); ptr += sizeof(float);
-
+  Bitstream bs(packet->data);
+  bs.write(E_CLIENT_TO_SERVER_STATE);
+  bs.write(eid);
+  bs.write(pos);
+  bs.write(radius);
   enet_peer_send(peer, 1, packet);
 }
 
-void send_snapshot(ENetPeer *peer, uint16_t eid, float x, float y)
+void send_snapshot(ENetPeer *peer, uint16_t eid, Vector2 pos, float radius)
 {
   ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint16_t) +
-                                                   2 * sizeof(float),
+                                                   3 * sizeof(float),
                                                    ENET_PACKET_FLAG_UNSEQUENCED);
-  uint8_t *ptr = packet->data;
-  *ptr = E_SERVER_TO_CLIENT_SNAPSHOT; ptr += sizeof(uint8_t);
-  memcpy(ptr, &eid, sizeof(uint16_t)); ptr += sizeof(uint16_t);
-  memcpy(ptr, &x, sizeof(float)); ptr += sizeof(float);
-  memcpy(ptr, &y, sizeof(float)); ptr += sizeof(float);
-
+  Bitstream bs(packet->data);
+  bs.write(E_SERVER_TO_CLIENT_SNAPSHOT);
+  bs.write(eid);
+  bs.write(pos);
+  bs.write(radius);
   enet_peer_send(peer, 1, packet);
 }
 
@@ -76,19 +75,23 @@ void deserialize_set_controlled_entity(ENetPacket *packet, uint16_t &eid)
   eid = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
 }
 
-void deserialize_entity_state(ENetPacket *packet, uint16_t &eid, float &x, float &y)
+void deserialize_entity_state(ENetPacket *packet, uint16_t &eid, Vector2 &pos, float &radius)
 {
-  uint8_t *ptr = packet->data; ptr += sizeof(uint8_t);
-  eid = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  x = *(float*)(ptr); ptr += sizeof(float);
-  y = *(float*)(ptr); ptr += sizeof(float);
+  MessageType packet_type;
+  Bitstream bs(packet->data);
+  bs.read(packet_type);
+  bs.read(eid);
+  bs.read(pos);
+  bs.read(radius);
 }
 
-void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y)
+void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, Vector2 &pos, float &radius)
 {
-  uint8_t *ptr = packet->data; ptr += sizeof(uint8_t);
-  eid = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  x = *(float*)(ptr); ptr += sizeof(float);
-  y = *(float*)(ptr); ptr += sizeof(float);
+    MessageType packet_type;
+    Bitstream bs(packet->data);
+    bs.read(packet_type);
+    bs.read(eid);
+    bs.read(pos);
+    bs.read(radius);
 }
 

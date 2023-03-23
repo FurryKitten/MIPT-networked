@@ -30,14 +30,15 @@ void on_set_controlled_entity(ENetPacket *packet)
 void on_snapshot(ENetPacket *packet)
 {
   uint16_t eid = invalid_entity;
-  float x = 0.f; float y = 0.f;
-  deserialize_snapshot(packet, eid, x, y);
+  Vector2 pos{0, 0};
+  float radius = 10.f;
+  deserialize_snapshot(packet, eid, pos, radius);
   // TODO: Direct adressing, of course!
   for (Entity &e : entities)
     if (e.eid == eid)
     {
-      e.x = x;
-      e.y = y;
+        e.pos = pos;
+        e.radius = radius;
     }
 }
 
@@ -127,16 +128,16 @@ int main(int argc, const char **argv)
       bool up = IsKeyDown(KEY_UP);
       bool down = IsKeyDown(KEY_DOWN);
       // TODO: Direct adressing, of course!
-      for (Entity &e : entities)
-        if (e.eid == my_entity)
-        {
+      for (Entity &e : entities) {
+        if (e.eid == my_entity) {
           // Update
-          e.x += ((left ? -dt : 0.f) + (right ? +dt : 0.f)) * 100.f;
-          e.y += ((up ? -dt : 0.f) + (down ? +dt : 0.f)) * 100.f;
+          e.pos.x += ((left ? -dt : 0.f) + (right ? +dt : 0.f)) * 100.f;
+          e.pos.y += ((up ? -dt : 0.f) + (down ? +dt : 0.f)) * 100.f;
 
           // Send
-          send_entity_state(serverPeer, my_entity, e.x, e.y);
+          send_entity_state(serverPeer, my_entity, e.pos, e.radius);
         }
+      }
     }
 
 
@@ -145,8 +146,10 @@ int main(int argc, const char **argv)
       BeginMode2D(camera);
         for (const Entity &e : entities)
         {
-          const Rectangle rect = {e.x, e.y, 10.f, 10.f};
-          DrawRectangleRec(rect, GetColor(e.color));
+          if (e.eid == my_entity) {
+            DrawCircleV(e.pos, e.radius, BLACK);
+          }
+          DrawCircleV(e.pos, e.radius - 2.0f, e.color);
         }
 
       EndMode2D();
