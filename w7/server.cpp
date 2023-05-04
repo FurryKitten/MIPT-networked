@@ -2,13 +2,23 @@
 #include <iostream>
 #include "entity.h"
 #include "protocol.h"
+#include "quantisation.h"
 #include "mathUtils.h"
 #include <stdlib.h>
 #include <vector>
 #include <map>
+#include <chrono>
+#include <thread>
 
 static std::vector<Entity> entities;
 static std::map<uint16_t, ENetPeer*> controlledMap;
+
+#ifdef WIN32
+void usleep(__int64 usec)
+{
+    std::this_thread::sleep_for(std::chrono::microseconds(usec));
+}
+#endif
 
 void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
 {
@@ -55,6 +65,7 @@ void on_input(ENetPacket *packet)
 
 int main(int argc, const char **argv)
 {
+  test();
   if (enet_initialize() != 0)
   {
     printf("Cannot init ENet");

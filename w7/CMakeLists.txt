@@ -17,7 +17,7 @@ set(W7_SERVER_SOURCES
     server.cpp
     protocol.cpp
     entity.cpp
-    )
+        bitsteam.h quantisation.cpp)
 
 
 include_directories("../3rdParty/enet/include")
